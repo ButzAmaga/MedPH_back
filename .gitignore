@@ -1,0 +1,17 @@
+# === Python System Files ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+dist/
+
+# === IDEs and Editors ===
+# VS Code
+.vscode/
+!.vscode/extensions.json
+*.code-workspace
+
+
