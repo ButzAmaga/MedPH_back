@@ -1,11 +1,10 @@
 import os
 import json
 import asyncio
-from typing import AsyncGenerator, Any
-
+from typing import AsyncGenerator
 from fastapi import APIRouter, UploadFile, File, HTTPException, status
 from fastapi.responses import FileResponse, StreamingResponse
-from services.custom_toJson import SafeJsonEncoder
+from services.lib_SSE import run_with_heartbeats, sse, sse_progress
 from services import lib_cleaning as cleaner
 
 router = APIRouter(
@@ -15,52 +14,6 @@ router = APIRouter(
 # Define the base directory where you want to cache or save the cleaned datasets
 CLEANED_DIR = os.path.join("output_source", "01")
 FILE_NAME = "cleaned.csv"
-
-# Interval (seconds) between keep-alive heartbeats during long blocking operations
-HEARTBEAT_INTERVAL = 10
-
-# ---------------------------------------------------------------------------
-# SSE helpers
-# ---------------------------------------------------------------------------
-
-def _sse(event: str, data: dict) -> str:
-    """Formats a single Server-Sent Events frame, safely serialising all pandas/numpy types."""
-    return f"event: {event}\ndata: {json.dumps(data, cls=SafeJsonEncoder)}\n\n"
- 
-
-def _sse_progress(message: str, step: int, total_steps: int = 6) -> str:
-    return _sse("progress", {"step": step, "total": total_steps, "message": message})
-
-
-def _sse_heartbeat() -> str:
-    """SSE comment line — invisible to EventSource listeners but resets proxy timeout."""
-    return ": heartbeat\n\n"
-
-
-# ---------------------------------------------------------------------------
-# Concurrent heartbeat runner
-# ---------------------------------------------------------------------------
-
-async def _run_with_heartbeats(queue: asyncio.Queue, fn, *args) -> Any:
-    """
-    Runs a blocking function in a thread pool executor.
-    While it is running, pushes a heartbeat into `queue` every
-    HEARTBEAT_INTERVAL seconds so the stream generator can forward
-    them to the client without blocking on the heavy work.
-    """
-    loop = asyncio.get_event_loop()
-    task = loop.run_in_executor(None, fn, *args)
-
-    while not task.done():
-        try:
-            # Wait up to HEARTBEAT_INTERVAL seconds; if task finishes sooner,
-            # asyncio.wait raises TimeoutError which we just swallow.
-            await asyncio.wait_for(asyncio.shield(task), timeout=HEARTBEAT_INTERVAL)
-        except asyncio.TimeoutError:
-            # Task still running — push a heartbeat for the generator to yield
-            await queue.put(_sse_heartbeat())
-
-    return await task  # re-raises any exception from the thread
 
 
 # ---------------------------------------------------------------------------
@@ -89,10 +42,10 @@ async def _clean_pipeline_stream(
             yield await hb_queue.get()
 
     # ── Step 1 · Load raw DataFrame ─────────────────────────────────────────
-    yield _sse_progress("Loading raw DataFrame from uploaded file…", step=1)
+    yield sse_progress("Loading raw DataFrame from uploaded file…", step=1)
 
     try:
-        df_before = await _run_with_heartbeats(
+        df_before = await run_with_heartbeats(
             hb_queue,
             cleaner.load_dataframe_from_stream,
             contents, filename, is_2022_format,
@@ -100,87 +53,87 @@ async def _clean_pipeline_stream(
     except ValueError as val_err:
         async for hb in drain_heartbeats():
             yield hb
-        yield _sse("error", {"detail": str(val_err), "status_code": 400})
+        yield sse("error", {"detail": str(val_err), "status_code": 400})
         return
     except Exception as err:
         async for hb in drain_heartbeats():
             yield hb
-        yield _sse("error", {"detail": f"Parsing error: {str(err)}", "status_code": 422})
+        yield sse("error", {"detail": f"Parsing error: {str(err)}", "status_code": 422})
         return
 
     async for hb in drain_heartbeats():
         yield hb
 
-    yield _sse_progress(
+    yield sse_progress(
         f"Raw DataFrame loaded — {len(df_before):,} rows × {len(df_before.columns)} columns.",
         step=1,
     )
 
     # ── Step 2 · Snapshot before cleaning ───────────────────────────────────
-    yield _sse_progress("Generating pre-cleaning metadata snapshot…", step=2)
+    yield sse_progress("Generating pre-cleaning metadata snapshot…", step=2)
 
-    before_snapshot = await _run_with_heartbeats(
+    before_snapshot = await run_with_heartbeats(
         hb_queue, cleaner.generate_metadata_snapshot, df_before
     )
 
     async for hb in drain_heartbeats():
         yield hb
 
-    yield _sse("snapshot_before", before_snapshot)
-    yield _sse_progress(
+    yield sse("snapshot_before", before_snapshot)
+    yield sse_progress(
         f"Pre-cleaning snapshot ready — {before_snapshot['total_rows']:,} rows, "
         f"{before_snapshot['total_columns']} columns.",
         step=2,
     )
 
     # ── Step 3 · Execute cleaning pipeline ──────────────────────────────────
-    yield _sse_progress(
+    yield sse_progress(
         "Running cleaning pipeline (normalize → filter → deduplicate → impute)…",
         step=3,
     )
 
-    df_after = await _run_with_heartbeats(
+    df_after = await run_with_heartbeats(
         hb_queue, cleaner.execute_cleaning_pipeline, df_before
     )
 
     async for hb in drain_heartbeats():
         yield hb
 
-    yield _sse_progress(
+    yield sse_progress(
         f"Cleaning complete — {len(df_after):,} rows retained after filtering & deduplication.",
         step=3,
     )
 
     # ── Step 4 · Snapshot after cleaning ────────────────────────────────────
-    yield _sse_progress("Generating post-cleaning metadata snapshot…", step=4)
+    yield sse_progress("Generating post-cleaning metadata snapshot…", step=4)
 
-    after_snapshot = await _run_with_heartbeats(
+    after_snapshot = await run_with_heartbeats(
         hb_queue, cleaner.generate_metadata_snapshot, df_after
     )
 
     async for hb in drain_heartbeats():
         yield hb
 
-    yield _sse("snapshot_after", after_snapshot)
-    yield _sse_progress(
+    yield sse("snapshot_after", after_snapshot)
+    yield sse_progress(
         f"Post-cleaning snapshot ready — {after_snapshot['total_rows']:,} rows, "
         f"{after_snapshot['total_columns']} columns.",
         step=4,
     )
 
     # ── Step 5 · Persist cleaned CSV ─────────────────────────────────────────
-    yield _sse_progress("Saving cleaned CSV to disk…", step=5)
+    yield sse_progress("Saving cleaned CSV to disk…", step=5)
 
     save_path = os.path.join(CLEANED_DIR, FILE_NAME)
     try:
         os.makedirs(CLEANED_DIR, exist_ok=True)
-        await _run_with_heartbeats(
+        await run_with_heartbeats(
             hb_queue, lambda: df_after.to_csv(save_path, index=False)
         )
     except Exception as save_err:
         async for hb in drain_heartbeats():
             yield hb
-        yield _sse(
+        yield sse(
             "error",
             {
                 "detail": f"Data processed but failed to write to storage: {str(save_err)}",
@@ -192,11 +145,11 @@ async def _clean_pipeline_stream(
     async for hb in drain_heartbeats():
         yield hb
 
-    yield _sse_progress(f"Cleaned file saved → {save_path}", step=5)
+    yield sse_progress(f"Cleaned file saved → {save_path}", step=5)
 
     # ── Step 6 · Final result ────────────────────────────────────────────────
-    yield _sse_progress("Pipeline finished successfully.", step=6)
-    yield _sse(
+    yield sse_progress("Pipeline finished successfully.", step=6)
+    yield sse(
         "result",
         {
             "filename": filename,
