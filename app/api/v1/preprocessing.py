@@ -4,22 +4,27 @@ from fastapi import APIRouter, HTTPException, status
 import pandas as pd
 from pydantic import BaseModel
 from services import lib_processing as preprocessor
+from typing import List
 
-router = APIRouter(prefix="/preprocessing", tags=["Data Preprocessing & Features"])
+router = APIRouter(tags=["Data Preprocessing & Features"])
 
 # Define paths for local staging structures
 CLEANED_INPUT_DIR = os.path.join("output_source", "01")
 PREPROCESSED_OUTPUT_DIR = os.path.join("output_source", "02")
 CLEANED_FILE_NAME = "cleaned.csv"
 
-class PreprocessResultResponse(BaseModel):
-    status: str
-    input_file: str
-    output_file: str
-    saved_path: str
-    metrics: dict
+# Explicit inner validation metric structure
+class PreprocessingMetrics(BaseModel):
+    total_records: int
+    column_count: int
+    columns_present: List[str]
+    unique_years_computed: List[int]
+    unique_regions_collapsed: List[str]
 
-@router.post("/process-file/", response_model=PreprocessResultResponse)
+class PreprocessResultResponse(BaseModel):
+    metrics: PreprocessingMetrics
+
+@router.post("/preprocessing", response_model=PreprocessResultResponse)
 async def process_file():
     """
     Locates an existing cleaned dataset on disk, performs Winsorization, 
@@ -80,9 +85,5 @@ async def process_file():
         )
 
     return PreprocessResultResponse(
-        status="success",
-        input_file=CLEANED_FILE_NAME,
-        output_file=output_name,
-        saved_path=output_save_path,
         metrics=metrics_snapshot
     )
