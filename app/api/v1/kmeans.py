@@ -4,9 +4,12 @@ from pydantic import BaseModel
 
 # Ingest internal modular library tools
 from services.lib_kmeans import (
+    extract_cluster_metrics,
+    generate_3d_cluster_image,
     load_local_pca_data,
-    fit_kmeans_and_extract_metrics,
-    generate_3d_cluster_base64
+    generate_3d_cluster_base64,
+    predict_clusters,
+    train_kmeans
 )
 
 router = APIRouter(
@@ -15,6 +18,7 @@ router = APIRouter(
 )
 
 # Enforce strict paths relative to workspace execution
+SOURCE_PATH = "output_source/cluster_source/cluster_src.csv" # for source cluster
 INPUT_PATH = "output_source/03/pca_processed.csv"
 OUTPUT_DIR = Path("output_source/04/KMeans")
 OUTPUT_FILE = f"{OUTPUT_DIR}/kmeans_clustered.csv"
@@ -39,21 +43,50 @@ async def run_pipeline_clustering(
         ge=2, 
         le=15, 
         description="The desired cluster size parameter (K) passed down into the K-Means matrix."
+    ),
+    init_strategy: str = Query(
+        default="k-means++",
+        description="The initialization strategy for K-Means clustering."
+    ),
+    n_init: int = Query(
+        default=10,
+        ge=1,
+        le=100,
+        description="Number of initial runs for K-Means clustering."
+    ),
+    max_iterations: int = Query(
+        default=300,
+        ge=1,
+        le=1000,
+        description="Maximum number of iterations for K-Means clustering."
     )
 ):
     try:
-        # 1. Access local raw data layer directly from Step 03 folder output
+        # 1. Load and Train the Med CSV From 2020 to 2025
+        pd_source = load_local_pca_data(SOURCE_PATH)
+        kmeans = train_kmeans(
+            pd_source, 
+            k=k_selected, 
+            init_strategy=init_strategy, 
+            n_init=n_init, 
+            max_iterations=max_iterations)
+
+        # 1. Access local raw data layer directly from Step 03 folder output which is the pca input
         df = load_local_pca_data(str(INPUT_PATH))
-        
+
         # 2. Fit model rules and harvest operational stats
-        df_clustered, metrics = fit_kmeans_and_extract_metrics(df, k=k_selected)
+        df_clustered = predict_clusters(df, kmeans)
         
         # 3. Secure output destination path rules and save
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
         df_clustered.to_csv(OUTPUT_FILE, index=False)
         
+        # 4 Extract the cluster metrics from df clustered
+        metrics = extract_cluster_metrics(df_clustered, kmeans)
+        
         # 4. Generate visual plot component represented safely in base64 string
         base64_img = generate_3d_cluster_base64(df_clustered)
+        generate_3d_cluster_image(df_clustered)
         
         # 5. Populate and serialize standard JSON body blueprint
         return ClusteringResponse(
@@ -81,3 +114,10 @@ async def run_pipeline_clustering(
         raise HTTPException(status_code=422, detail=str(val_err))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Pipeline runtime processing error: {str(e)}")
+    
+
+@router.get("/get-kMeans-cluster-plot")
+def get_kmeans_plot():
+    return {
+        "image_url": f"/static/plots/cluster.png"
+    }
