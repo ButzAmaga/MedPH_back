@@ -60,6 +60,10 @@ def generate_preprocessing_snapshot(df: pd.DataFrame) -> dict:
         "total_records": int(len(df)),
         "column_count": int(len(df.columns)),
         "columns_present": [str(c) for c in df.columns],
+        "pca_ready_columns": [
+            str(c) for c in df.columns 
+            if pd.api.types.is_numeric_dtype(df[c]) and df[c].notna().any()
+        ],
         #  .tolist() converts NumPy arrays (e.g. numpy.int32) into native Python types
         "unique_years_computed": [int(y) for y in df["Year"].unique()] if "Year" in df.columns else [],
         "unique_regions_collapsed": [str(r) for r in df["Region"].unique()] if "Region" in df.columns else []

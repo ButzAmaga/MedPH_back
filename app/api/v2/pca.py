@@ -3,12 +3,13 @@ import json
 import math
 import asyncio
 from datetime import date, datetime
+import os
 from typing import AsyncGenerator, Any, List
 
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter, Form, Query, status
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Form, HTTPException, Query, status
+from fastapi.responses import FileResponse, StreamingResponse
 from services.lib_SSE import run_with_heartbeats, sse, sse_progress
 from services.lib_pca import run_pca_pipeline
 
@@ -16,6 +17,9 @@ router = APIRouter(
     prefix="/pca/v2",
     tags=["Dimensionality Reduction"]
 )
+
+PCA_OUTPUT_DIR = "output_source/03"
+PCA_FILE_NAME = "pca_processed.csv"
 
 # ---------------------------------------------------------------------------
 # Streaming pipeline generator
@@ -189,4 +193,25 @@ async def calculate_pca(
             "X-Accel-Buffering": "no",
             "Connection": "keep-alive",
         },
+    )
+
+
+
+@router.get("/download", response_class=FileResponse)
+async def download_cleaned_file():
+    """
+    Retrieve and download a previously processed and cleaned CSV file.
+    """
+    file_path = os.path.join(PCA_OUTPUT_DIR, PCA_FILE_NAME)
+
+    if not os.path.exists(file_path):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="The requested file does not exist or has expired.",
+        )
+
+    return FileResponse(
+        path=file_path,
+        media_type="text/csv",
+        filename=PCA_FILE_NAME,
     )
