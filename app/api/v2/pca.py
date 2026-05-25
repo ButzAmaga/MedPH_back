@@ -7,7 +7,7 @@ from typing import AsyncGenerator, Any, List
 
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Form, Query, status
 from fastapi.responses import StreamingResponse
 from services.lib_SSE import run_with_heartbeats, sse, sse_progress
 from services.lib_pca import run_pca_pipeline
@@ -153,16 +153,14 @@ async def _pca_pipeline_stream(
 
 @router.post("/compute_pca", status_code=status.HTTP_200_OK)
 async def calculate_pca(
-    matrix_mode: str = Query("base", description="Feature matrix subset selection: 'base' or 'scaled'"),
-    max_components: int = Query(3, ge=1, le=10, description="Maximum number of Principal Components to extract"),
-    custom_input_path: str = Query(
+    matrix_mode: str = Form("base", description="Feature matrix subset selection: 'base' or 'scaled'"),
+    max_components: int = Form(3, ge=1, le=10, description="Maximum number of Principal Components to extract"),
+    custom_input_path: str = Form(
         "output_source/02/cleaned_preprocessed.csv",
         description="Local relative server path to the preprocessed dataset"
     ),
-    selected_cols: List[str] = Query(
-        [],
-        description="selected columns for PCA"
-    ),
+    # Keep Form here
+    selected_cols: List[str] = Form(default=[], description="Selected Columns.")
 ):
     """
     Triggers the PCA reduction pipeline using a preprocessed file stored on disk.
@@ -176,6 +174,8 @@ async def calculate_pca(
     - `result`      — final payload with output path + full diagnostics (Step 4)
     - `error`       — error detail + HTTP status code
     """
+
+    print(selected_cols)
     return StreamingResponse(
         _pca_pipeline_stream(
             input_csv_path=custom_input_path,

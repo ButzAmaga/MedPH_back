@@ -20,7 +20,7 @@ def run_pca_pipeline(
     matrix_mode: str = "base", 
     max_pc: int = 3, 
     output_dir: str = "output_source/03",
-    selected_columns: List[str] = []
+    selected_columns: List = []
     # results_dir: str = "results/03/Clustering"
 ) -> str:
     """
@@ -28,7 +28,7 @@ def run_pca_pipeline(
     appends PC scores, and outputs a combined CSV and diagnostic JSON.
     """
 
-
+    
 
     if not isinstance(selected_columns, list):
         raise TypeError(f"selected_columns must be list, got {type(selected_columns)}")
@@ -39,6 +39,8 @@ def run_pca_pipeline(
         raise FileNotFoundError(f"Target dataset file not found at: '{input_csv_path}'")
         
     df = pd.read_csv(input_csv_path)
+    print("cols:", df.columns.tolist())
+    print("selected cols:", selected_columns)
     if df.empty:
         raise ValueError(f"The source dataset file at '{input_csv_path}' is empty.")
 
@@ -48,15 +50,22 @@ def run_pca_pipeline(
 
     # 3. Select appropriate columns based on the requested matrix mode
     if matrix_mode == "base":
-        available_cols = [c for c in selected_columns if c in df.columns]
+        available_cols = [
+            c for c in selected_columns 
+            if c in df.columns and not pd.api.types.is_string_dtype(df[c])
+        ]
+        
         if not available_cols: 
             raise ValueError("None of the base PCA columns were discovered in the dataset matrix.")
         working_df = df[available_cols].copy()
+
     elif matrix_mode == "scaled":
         working_df = df.select_dtypes(include=[np.number]).copy()
     else:
         raise ValueError(f"Unsupported matrix mode: '{matrix_mode}'. Choose 'base' or 'scaled'.")
 
+    print("Step 4 of PCA")
+    print(working_df)
     # 4. Fill missing entries and drop zero/near-zero variance constants
     working_df = working_df.fillna(working_df.median())
     low_variance_cols = [col for col in working_df.columns if working_df[col].var() < 1e-18]
