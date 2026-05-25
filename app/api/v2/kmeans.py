@@ -7,7 +7,7 @@ from typing import AsyncGenerator, Any
 
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Form, Query
 from fastapi.responses import StreamingResponse
 
 from services.lib_SSE import run_with_heartbeats, sse, sse_progress
@@ -224,10 +224,10 @@ async def _kmeans_pipeline_stream(
 
 @router.post("/run-pipeline-clustering/")
 async def run_pipeline_clustering(
-    k_selected: int = Query(default=3, ge=2, le=15, description="Desired cluster size parameter (K)."),
-    init_strategy: str = Query(default="k-means++", description="K-Means initialisation strategy."),
-    n_init: int = Query(default=10, ge=1, le=100, description="Number of initialisation runs."),
-    max_iterations: int = Query(default=300, ge=1, le=1000, description="Maximum K-Means iterations."),
+    k_selected: int = Form(default=3, ge=2, le=15, description="Desired cluster size parameter (K)."),
+    init_strategy: str = Form(default="k-means++", description="K-Means initialisation strategy."),
+    n_init: int = Form(default=10, ge=1, le=100, description="Number of initialisation runs."),
+    max_iterations: int = Form(default=300, ge=1, le=1000, description="Maximum K-Means iterations."),
 ):
     """
     Trains K-Means on the cluster source CSV, predicts labels on the PCA output,
