@@ -3,7 +3,7 @@ import json
 import math
 import asyncio
 from datetime import date, datetime
-from typing import AsyncGenerator, Any
+from typing import AsyncGenerator, Any, List
 
 import numpy as np
 import pandas as pd
@@ -25,6 +25,7 @@ async def _pca_pipeline_stream(
     input_csv_path: str,
     matrix_mode: str,
     max_components: int,
+    selected_c: List[str],
 ) -> AsyncGenerator[str, None]:
     """
     Yields SSE frames for every PCA pipeline step.
@@ -89,10 +90,12 @@ async def _pca_pipeline_stream(
     try:
         output_path, diagnostics = await run_with_heartbeats(
             hb_queue,
-            run_pca_pipeline,
-            input_csv_path,
-            matrix_mode,
-            max_components,
+            lambda: run_pca_pipeline(
+                input_csv_path=input_csv_path,
+                matrix_mode=matrix_mode,
+                max_pc=max_components,
+                selected_columns=selected_c,
+            ),
         )
     except FileNotFoundError as e:
         async for hb in drain_heartbeats():
@@ -156,6 +159,10 @@ async def calculate_pca(
         "output_source/02/cleaned_preprocessed.csv",
         description="Local relative server path to the preprocessed dataset"
     ),
+    selected_cols: List[str] = Query(
+        [],
+        description="selected columns for PCA"
+    ),
 ):
     """
     Triggers the PCA reduction pipeline using a preprocessed file stored on disk.
@@ -174,6 +181,7 @@ async def calculate_pca(
             input_csv_path=custom_input_path,
             matrix_mode=matrix_mode,
             max_components=max_components,
+            selected_c=selected_cols
         ),
         media_type="text/event-stream",
         headers={

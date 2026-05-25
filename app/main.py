@@ -5,7 +5,7 @@ from api.v2.cleaning import router as cleaning_router_stream
 from api.v1.preprocessing import router as preprocessing_router
 from api.v2.preprocessing import router as preprocessing_router_stream
 from api.v2.pca import router as pca_router_stream
-from api.v1.kmeans import router as kmeans_router
+from api.v2.kmeans import router as kmeans_router_stream
 
 app = FastAPI(
     title="MedFlowPH — Clean Architecture API",
@@ -20,4 +20,4 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 app.include_router(cleaning_router_stream)
 app.include_router(preprocessing_router_stream)
 app.include_router(pca_router_stream)
-app.include_router(kmeans_router)
+app.include_router(kmeans_router_stream)

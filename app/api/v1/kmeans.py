@@ -84,9 +84,9 @@ async def run_pipeline_clustering(
         # 4 Extract the cluster metrics from df clustered
         metrics = extract_cluster_metrics(df_clustered, kmeans)
         
-        # 4. Generate visual plot component represented safely in base64 string
+        # 5. Generate visual plot component represented safely in base64 string
         base64_img = generate_3d_cluster_base64(df_clustered)
-        generate_3d_cluster_image(df_clustered)
+        generate_3d_cluster_image(df_clustered) # for saving it to the backend
         
         # 5. Populate and serialize standard JSON body blueprint
         return ClusteringResponse(

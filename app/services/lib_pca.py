@@ -1,6 +1,7 @@
 # pca_library.py
 import os
 import json
+from typing import List
 import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
@@ -19,12 +20,20 @@ def run_pca_pipeline(
     matrix_mode: str = "base", 
     max_pc: int = 3, 
     output_dir: str = "output_source/03",
+    selected_columns: List[str] = []
     # results_dir: str = "results/03/Clustering"
 ) -> str:
     """
     Reads a preprocessed CSV from disk, runs standard PCA, 
     appends PC scores, and outputs a combined CSV and diagnostic JSON.
     """
+
+
+
+    if not isinstance(selected_columns, list):
+        raise TypeError(f"selected_columns must be list, got {type(selected_columns)}")
+    
+    
     # 1. Validation check on the target input file
     if not os.path.exists(input_csv_path):
         raise FileNotFoundError(f"Target dataset file not found at: '{input_csv_path}'")
@@ -39,8 +48,8 @@ def run_pca_pipeline(
 
     # 3. Select appropriate columns based on the requested matrix mode
     if matrix_mode == "base":
-        available_cols = [c for c in POLICY_PCA_BASE_COLUMNS if c in df.columns]
-        if not available_cols:
+        available_cols = [c for c in selected_columns if c in df.columns]
+        if not available_cols: 
             raise ValueError("None of the base PCA columns were discovered in the dataset matrix.")
         working_df = df[available_cols].copy()
     elif matrix_mode == "scaled":
