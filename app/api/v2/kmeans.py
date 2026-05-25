@@ -22,8 +22,8 @@ from services.lib_kmeans import (
 )
 
 router = APIRouter(
-    prefix="/analytics",
-    tags=["Internal Pipeline Segmentation Engine"]
+    prefix="/kmeans/v2",
+    tags=["k means clustering"]
 )
 
 SOURCE_PATH = "output_source/cluster_source/cluster_src.csv"
@@ -222,7 +222,7 @@ async def _kmeans_pipeline_stream(
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/run-pipeline-clustering/")
+@router.post("/cluster")
 async def run_pipeline_clustering(
     k_selected: int = Form(default=3, ge=2, le=15, description="Desired cluster size parameter (K)."),
     init_strategy: str = Form(default="k-means++", description="K-Means initialisation strategy."),
