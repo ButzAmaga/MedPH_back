@@ -7,8 +7,11 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 import matplotlib
 import numpy as np
-matplotlib.use('Agg')  # Prevents GUI thread errors in web servers
+from typing import Dict, Any
 import matplotlib.pyplot as plt
+
+matplotlib.use('Agg')  # Prevents GUI thread errors in web servers
+
 
 def load_local_pca_data(file_path: str) -> pd.DataFrame:
     """Loads the PCA output from the local backend directory and validates structure."""
@@ -133,6 +136,126 @@ def extract_cluster_metrics(
         "silhouette_score_sample": sil_avg,
         "cluster_distribution": cluster_distribution,
     }
+
+def generate_cluster_summary(
+    edf: pd.DataFrame, # preprocessed pca with cluster
+    cluster_column: str = "cluster_id",
+    numeric_variance_threshold: float = 0.0,
+    categorical_dominance_threshold: float = 0.6,
+    max_unique_categories: int = 20
+) -> Dict[str, Any]:
+    """
+    Clean cluster summary optimized for frontend consumption.
+
+    Outputs:
+    - Only important numeric features (based on variance across clusters)
+    - Only dominant categorical values (based on threshold)
+    - Removes noisy/high-cardinality columns
+    """
+    # get the clusters id from pca preprocessed data
+    edf_cluster_id = edf[cluster_column]
+
+    # load the cleaned original data
+    df = pd.read_csv('output_source/02/cleaned_preprocessed.csv')
+
+    # bind the edf_cluster_id to the original data
+    df[cluster_column] = edf_cluster_id
+
+    # make the UNSPSC Code a categorical
+    df['UNSPSC Code'] = df['UNSPSC Code'].astype("category")
+
+    if cluster_column not in df.columns:
+        raise ValueError(f"'{cluster_column}' not found in dataframe")
+
+    # =========================
+    # Split column types
+    # =========================
+    numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+    numeric_cols = [c for c in numeric_cols if c != cluster_column]
+
+    categorical_cols = df.select_dtypes(exclude=np.number).columns.tolist()
+    categorical_cols = [c for c in categorical_cols if c != cluster_column]
+
+    clusters = df[cluster_column].unique()
+
+    # =========================
+    # Compute numeric cluster stats
+    # =========================
+    numeric_stats = df.groupby(cluster_column)[numeric_cols].mean()
+
+    # Determine "important" numeric features by variance across clusters
+    numeric_variance = numeric_stats.var().sort_values(ascending=False)
+
+    important_numeric_cols = numeric_variance[
+        numeric_variance > numeric_variance_threshold
+    ].index.tolist()
+
+    # =========================
+    # Build result
+    # =========================
+    result = {
+        "cluster_column": cluster_column,
+        "important_numeric_features": important_numeric_cols,
+        "clusters": {}
+    }
+
+    for cluster_id in clusters:
+        cluster_df = df[df[cluster_column] == cluster_id]
+
+        cluster_data = {
+            "row_count": int(len(cluster_df)),
+            "numeric_summary": {},
+            "dominant_categories": {}
+        }
+
+        # =========================
+        # NUMERIC (filtered)
+        # =========================
+        for col in important_numeric_cols:
+
+            values = cluster_df[col].dropna()
+
+            if values.empty:
+                continue
+
+            cluster_data["numeric_summary"][col] = {
+                "mean": float(values.mean()),
+                "min": float(values.min()),
+                "max": float(values.max())
+            }
+
+        # =========================
+        # CATEGORICAL (filtered)
+        # =========================
+        for col in categorical_cols:
+
+            series = cluster_df[col].dropna()
+
+            if series.empty:
+                continue
+
+            # Skip high-cardinality columns
+            if series.nunique() > max_unique_categories:
+                continue
+
+            value_counts = series.value_counts(normalize=True)
+
+            top_value = value_counts.index[0]
+            top_ratio = float(value_counts.iloc[0])
+
+            # Only keep if dominant enough
+            if top_ratio < categorical_dominance_threshold:
+                continue
+
+            cluster_data["dominant_categories"][col] = {
+                "value": str(top_value),
+                "percentage": round(top_ratio * 100, 2)
+            }
+
+        result["clusters"][str(cluster_id)] = cluster_data
+
+    return result
+
 
 
 # ---------------------------------------------------------------------------

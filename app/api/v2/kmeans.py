@@ -2,19 +2,21 @@ import json
 import math
 import asyncio
 from datetime import date, datetime
+import os
 from pathlib import Path
 from typing import AsyncGenerator, Any
 
 import numpy as np
 import pandas as pd
 from fastapi import APIRouter, Form, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from services.lib_SSE import run_with_heartbeats, sse, sse_progress
 from services.lib_kmeans import (
     extract_cluster_metrics,
     generate_3d_cluster_image,
     generate_3d_cluster_base64,
+    generate_cluster_summary,
     load_local_pca_data,
     predict_clusters,
     save_predicted_csv,
@@ -60,7 +62,7 @@ async def _kmeans_pipeline_stream(
             yield await hb_queue.get()
 
     # ── Step 1 · Load source training data ──────────────────────────────────
-    yield sse_progress(f"Loading cluster source data from '{SOURCE_PATH}'…", step=1, total_steps=7)
+    yield sse_progress(f"Loading cluster source data from '{SOURCE_PATH}'…", step=1, total_steps=8)
 
     try:
         pd_source = await run_with_heartbeats(hb_queue, load_local_pca_data, SOURCE_PATH)
@@ -77,7 +79,7 @@ async def _kmeans_pipeline_stream(
     yield sse_progress(
         f"Source data loaded — {len(pd_source):,} rows for model training.",
         step=1,
-        total_steps=7
+        total_steps=8
     )
 
     # ── Step 2 · Train K-Means ───────────────────────────────────────────────
@@ -85,7 +87,7 @@ async def _kmeans_pipeline_stream(
         f"Training K-Means model — k={k_selected}, init='{init_strategy}', "
         f"n_init={n_init}, max_iter={max_iterations}…",
         step=2,
-        total_steps=7
+        total_steps=8
     )
 
     try:
@@ -104,11 +106,11 @@ async def _kmeans_pipeline_stream(
         f"K-Means model trained — inertia: {kmeans.inertia_:.2f}, "
         f"iterations: {kmeans.n_iter_}.",
         step=2,
-        total_steps=7
+        total_steps=8
     )
 
     # ── Step 3 · Load inference data ─────────────────────────────────────────
-    yield sse_progress(f"Loading PCA inference data from '{INPUT_PATH}'…", step=3, total_steps=7)
+    yield sse_progress(f"Loading PCA inference data from '{INPUT_PATH}'…", step=3, total_steps=8)
 
     try:
         df = await run_with_heartbeats(hb_queue, load_local_pca_data, INPUT_PATH)
@@ -125,11 +127,11 @@ async def _kmeans_pipeline_stream(
     yield sse_progress(
         f"Inference data loaded — {len(df):,} rows to classify.",
         step=3,
-        total_steps=7
+        total_steps=8
     )
 
     # ── Step 4 · Predict clusters ────────────────────────────────────────────
-    yield sse_progress("Assigning cluster labels to inference dataset…", step=4, total_steps=7)
+    yield sse_progress("Assigning cluster labels to inference dataset…", step=4, total_steps=8)
 
     try:
         df_clustered = await run_with_heartbeats(hb_queue, predict_clusters, df, kmeans)
@@ -142,11 +144,11 @@ async def _kmeans_pipeline_stream(
     yield sse_progress(
         f"Cluster labels assigned — {df_clustered['cluster_id'].nunique()} distinct clusters found.",
         step=4,
-        total_steps=7
+        total_steps=8
     )
 
     # ── Step 5 · Extract metrics ─────────────────────────────────────────────
-    yield sse_progress("Computing cluster quality metrics (inertia, silhouette score)…", step=5, total_steps=7)
+    yield sse_progress("Computing cluster quality metrics (inertia, silhouette score)…", step=5, total_steps=8)
 
     try:
         cluster_metrics = await run_with_heartbeats(
@@ -167,7 +169,7 @@ async def _kmeans_pipeline_stream(
     )
 
     # ── Step 6 · Save CSV + generate visualizations ──────────────────────────
-    yield sse_progress(f"Saving clustered dataset to '{OUTPUT_FILE}'…", step=6, total_steps=7)
+    yield sse_progress(f"Saving clustered dataset to '{OUTPUT_FILE}'…", step=6, total_steps=8)
 
     try:
         saved_path = await run_with_heartbeats(
@@ -179,9 +181,9 @@ async def _kmeans_pipeline_stream(
         return
 
     async for hb in drain_heartbeats(): yield hb
-    yield sse_progress(f"Dataset saved → {saved_path}", step=6, total_steps=7)
+    yield sse_progress(f"Dataset saved → {saved_path}", step=6, total_steps=8)
 
-    yield sse_progress("Generating 3D cluster scatter visualisation…", step=6, total_steps=7)
+    yield sse_progress("Generating 3D cluster scatter visualisation…", step=6, total_steps=8)
 
     try:
         base64_img = await run_with_heartbeats(
@@ -194,11 +196,18 @@ async def _kmeans_pipeline_stream(
         return
 
     async for hb in drain_heartbeats(): yield hb
-    yield sse("visualization", {"cluster_3d_scatter_png_base64": base64_img})
-    yield sse_progress("3D scatter plot generated and saved.", step=6)
+    yield sse_progress("3D scatter plot generated and saved.", step=6, total_steps=8)
+
+    # Step 7 . Get Cluster Summary
+
+    yield sse_progress("Generating cluster summary.", step=7, total_steps=8)
+    cluster_summary = await run_with_heartbeats(hb_queue, generate_cluster_summary, df_clustered)
+
+    async for hb in drain_heartbeats(): yield hb
+    yield sse("cluster_summary", cluster_summary)
 
     # ── Step 7 · Final result ────────────────────────────────────────────────
-    yield sse_progress("K-Means clustering pipeline finished successfully.", step=7, total_steps=7)
+    yield sse_progress("K-Means clustering pipeline finished successfully.", step=8, total_steps=8)
     yield sse("result", {
         "status": "success",
         "input_source_read": INPUT_PATH,
@@ -212,7 +221,7 @@ async def _kmeans_pipeline_stream(
         },
         "observations": cluster_metrics,
         "visualizations": {
-            "cluster_3d_scatter_png_base64": base64_img,
+            "cluster_3d_scatter_png_base64": "none",
             "image_url": "/static/plots/cluster.png",
         },
     })
@@ -254,5 +263,17 @@ async def run_pipeline_clustering(
 
 
 @router.get("/download/3d-plot")
-def get_kmeans_plot():
-    return {"image_url": "/static/plots/cluster.png"}
+def download_kmeans_plot():
+    file_path = "static/plots/cluster.png"
+
+    if not os.path.exists(file_path):
+        return {"error": "File not found"}
+
+    return FileResponse(
+        path=file_path,
+        media_type="image/png",
+        filename="kmeans_cluster_plot.png",  # downloaded filename
+        headers={
+            "Content-Disposition": "attachment; filename=kmeans_cluster_plot.png"
+        }
+    )
