@@ -253,6 +253,6 @@ async def run_pipeline_clustering(
     )
 
 
-@router.get("/get-kMeans-cluster-plot")
+@router.get("/download/3d-plot")
 def get_kmeans_plot():
     return {"image_url": "/static/plots/cluster.png"}
