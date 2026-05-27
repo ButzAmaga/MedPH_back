@@ -14,13 +14,12 @@ from fastapi.responses import FileResponse, StreamingResponse
 from services.lib_SSE import run_with_heartbeats, sse, sse_progress
 from services.lib_kmeans import (
     extract_cluster_metrics,
+    fit_predict_clusters,
     generate_3d_cluster_image,
     generate_3d_cluster_base64,
     generate_cluster_summary,
     load_local_pca_data,
-    predict_clusters,
     save_predicted_csv,
-    train_kmeans,
 )
 
 router = APIRouter(
@@ -28,7 +27,7 @@ router = APIRouter(
     tags=["k means clustering"]
 )
 
-SOURCE_PATH = "output_source/cluster_source/cluster_src.csv"
+# SOURCE_PATH = "output_source/cluster_source/cluster_src.csv"
 INPUT_PATH = "output_source/03/pca_processed.csv"
 OUTPUT_DIR = Path("output_source/04/KMeans")
 OUTPUT_FILE = str(OUTPUT_DIR / "kmeans_clustered.csv")
@@ -62,10 +61,10 @@ async def _kmeans_pipeline_stream(
             yield await hb_queue.get()
 
     # ── Step 1 · Load source training data ──────────────────────────────────
-    yield sse_progress(f"Loading cluster source data from '{SOURCE_PATH}'…", step=1, total_steps=8)
+    yield sse_progress(f"Loading input cluster from '{INPUT_PATH}'…", step=1, total_steps=8)
 
     try:
-        pd_source = await run_with_heartbeats(hb_queue, load_local_pca_data, SOURCE_PATH)
+        pd_source = await run_with_heartbeats(hb_queue, load_local_pca_data, INPUT_PATH)
     except FileNotFoundError as e:
         async for hb in drain_heartbeats(): yield hb
         yield sse("error", {"detail": str(e), "status_code": 404})
@@ -82,73 +81,38 @@ async def _kmeans_pipeline_stream(
         total_steps=8
     )
 
-    # ── Step 2 · Train K-Means ───────────────────────────────────────────────
+    # ── Step 2 · Fit & predict clusters ─────────────────────────────────────
     yield sse_progress(
-        f"Training K-Means model — k={k_selected}, init='{init_strategy}', "
+        f"Fitting K-Means and assigning cluster labels — k={k_selected}, init='{init_strategy}', "
         f"n_init={n_init}, max_iter={max_iterations}…",
         step=2,
-        total_steps=8
+        total_steps=7
     )
 
     try:
-        kmeans = await run_with_heartbeats(
+        df_clustered, kmeans = await run_with_heartbeats(
             hb_queue,
-            train_kmeans,
+            fit_predict_clusters,
             pd_source, k_selected, 42, init_strategy, n_init, max_iterations,
         )
     except Exception as e:
         async for hb in drain_heartbeats(): yield hb
-        yield sse("error", {"detail": f"Model training failed: {str(e)}", "status_code": 500})
+        yield sse("error", {"detail": f"Model fit_predict failed: {str(e)}", "status_code": 500})
         return
 
     async for hb in drain_heartbeats(): yield hb
     yield sse_progress(
-        f"K-Means model trained — inertia: {kmeans.inertia_:.2f}, "
-        f"iterations: {kmeans.n_iter_}.",
+        f"K-Means fitted — inertia: {kmeans.inertia_:.2f}, iterations: {kmeans.n_iter_}, "
+        f"{df_clustered['cluster_id'].nunique()} distinct clusters assigned.",
         step=2,
-        total_steps=8
+        total_steps=7
     )
 
-    # ── Step 3 · Load inference data ─────────────────────────────────────────
-    yield sse_progress(f"Loading PCA inference data from '{INPUT_PATH}'…", step=3, total_steps=8)
+    # ── Step 3 · Removed ─────────────────────────────────────────
+    yield sse_progress(f"Resting…", step=3, total_steps=7)
 
-    try:
-        df = await run_with_heartbeats(hb_queue, load_local_pca_data, INPUT_PATH)
-    except FileNotFoundError as e:
-        async for hb in drain_heartbeats(): yield hb
-        yield sse("error", {"detail": str(e), "status_code": 404})
-        return
-    except ValueError as e:
-        async for hb in drain_heartbeats(): yield hb
-        yield sse("error", {"detail": str(e), "status_code": 422})
-        return
-
-    async for hb in drain_heartbeats(): yield hb
-    yield sse_progress(
-        f"Inference data loaded — {len(df):,} rows to classify.",
-        step=3,
-        total_steps=8
-    )
-
-    # ── Step 4 · Predict clusters ────────────────────────────────────────────
-    yield sse_progress("Assigning cluster labels to inference dataset…", step=4, total_steps=8)
-
-    try:
-        df_clustered = await run_with_heartbeats(hb_queue, predict_clusters, df, kmeans)
-    except Exception as e:
-        async for hb in drain_heartbeats(): yield hb
-        yield sse("error", {"detail": f"Cluster prediction failed: {str(e)}", "status_code": 500})
-        return
-
-    async for hb in drain_heartbeats(): yield hb
-    yield sse_progress(
-        f"Cluster labels assigned — {df_clustered['cluster_id'].nunique()} distinct clusters found.",
-        step=4,
-        total_steps=8
-    )
-
-    # ── Step 5 · Extract metrics ─────────────────────────────────────────────
-    yield sse_progress("Computing cluster quality metrics (inertia, silhouette score)…", step=5, total_steps=8)
+    # ── Step 4 · Extract metrics ─────────────────────────────────────────────
+    yield sse_progress("Computing cluster quality metrics (inertia, silhouette score)…", step=4, total_steps=7)
 
     try:
         cluster_metrics = await run_with_heartbeats(
@@ -164,12 +128,12 @@ async def _kmeans_pipeline_stream(
     yield sse_progress(
         f"Metrics ready — inertia: {cluster_metrics['inertia']:.2f}, "
         f"silhouette: {cluster_metrics['silhouette_score_sample']:.4f}.",
-        step=5,
+        step=4,
         total_steps=7
     )
 
-    # ── Step 6 · Save CSV + generate visualizations ──────────────────────────
-    yield sse_progress(f"Saving clustered dataset to '{OUTPUT_FILE}'…", step=6, total_steps=8)
+    # ── Step 5 · Save CSV + generate visualizations ──────────────────────────
+    yield sse_progress(f"Saving clustered dataset to '{OUTPUT_FILE}'…", step=5, total_steps=7)
 
     try:
         saved_path = await run_with_heartbeats(
@@ -181,9 +145,9 @@ async def _kmeans_pipeline_stream(
         return
 
     async for hb in drain_heartbeats(): yield hb
-    yield sse_progress(f"Dataset saved → {saved_path}", step=6, total_steps=8)
+    yield sse_progress(f"Dataset saved → {saved_path}", step=5, total_steps=7)
 
-    yield sse_progress("Generating 3D cluster scatter visualisation…", step=6, total_steps=8)
+    yield sse_progress("Generating 3D cluster scatter visualisation…", step=5, total_steps=7)
 
     try:
         base64_img = await run_with_heartbeats(
@@ -196,18 +160,17 @@ async def _kmeans_pipeline_stream(
         return
 
     async for hb in drain_heartbeats(): yield hb
-    yield sse_progress("3D scatter plot generated and saved.", step=6, total_steps=8)
+    yield sse_progress("3D scatter plot generated and saved.", step=5, total_steps=7)
 
-    # Step 7 . Get Cluster Summary
-
-    yield sse_progress("Generating cluster summary.", step=7, total_steps=8)
+    # ── Step 6 · Cluster summary ─────────────────────────────────────────────
+    yield sse_progress("Generating cluster summary.", step=6, total_steps=7)
     cluster_summary = await run_with_heartbeats(hb_queue, generate_cluster_summary, df_clustered)
 
     async for hb in drain_heartbeats(): yield hb
     yield sse("cluster_summary", cluster_summary)
 
     # ── Step 7 · Final result ────────────────────────────────────────────────
-    yield sse_progress("K-Means clustering pipeline finished successfully.", step=8, total_steps=8)
+    yield sse_progress("K-Means clustering pipeline finished successfully.", step=7, total_steps=7)
     yield sse("result", {
         "status": "success",
         "input_source_read": INPUT_PATH,

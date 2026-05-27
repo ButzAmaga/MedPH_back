@@ -91,6 +91,43 @@ def predict_clusters(
     return result_df
 
 
+def fit_predict_clusters(
+    df: pd.DataFrame,
+    k: int,
+    random_state: int = 42,
+    init_strategy: str = "k-means++",
+    n_init: int = 10,
+    max_iterations: int = 300
+) -> tuple[pd.DataFrame, KMeans]:
+    """
+    Fits a K-Means model on the PC coordinate columns and assigns cluster
+    labels in one step. Returns both the annotated DataFrame and the trained
+    model. Does NOT mutate the input DataFrame.
+
+    Args:
+        df:            DataFrame containing PC1, PC2, PC3 columns.
+        k:             Number of clusters.
+        random_state:  Seed for reproducibility.
+        init_strategy: Initialization strategy (default: "k-means++").
+        n_init:        Number of initializations to run.
+        max_iterations: Maximum number of iterations per run.
+
+    Returns:
+        Tuple of (annotated DataFrame with `cluster_id` column, fitted KMeans).
+    """
+    pc_coords = df[PC_COLS].values
+    kmeans = KMeans(
+        n_clusters=k,
+        init=init_strategy,
+        random_state=random_state,
+        n_init=n_init,
+        max_iter=max_iterations
+    )
+
+    result_df = df.copy()
+    result_df["cluster_id"] = kmeans.fit_predict(pc_coords)
+    return result_df, kmeans
+
 # ---------------------------------------------------------------------------
 # 3. Extract metrics
 # ---------------------------------------------------------------------------
