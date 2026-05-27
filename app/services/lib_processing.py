@@ -55,6 +55,9 @@ def generate_preprocessing_snapshot(df: pd.DataFrame) -> dict:
     """
     if df.empty:
         return {"total_records": 0, "column_count": 0, "columns_present": [], "unique_years_computed": [], "unique_regions_collapsed": []}
+    
+    # convert the number to object to be not included in PCA ready 
+    df["UNSPSC Code"] = df["UNSPSC Code"].astype("object")
         
     return {
         "total_records": int(len(df)),

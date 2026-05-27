@@ -39,8 +39,7 @@ def run_pca_pipeline(
         raise FileNotFoundError(f"Target dataset file not found at: '{input_csv_path}'")
         
     df = pd.read_csv(input_csv_path)
-    print("cols:", df.columns.tolist())
-    print("selected cols:", selected_columns)
+
     if df.empty:
         raise ValueError(f"The source dataset file at '{input_csv_path}' is empty.")
 
@@ -52,7 +51,10 @@ def run_pca_pipeline(
     if matrix_mode == "base":
         available_cols = [
             c for c in selected_columns 
-            if c in df.columns and not pd.api.types.is_string_dtype(df[c])
+            if c in df.columns 
+            and not pd.api.types.is_string_dtype(df[c])
+            and not pd.api.types.is_object_dtype(df[c])
+            and not isinstance(df[c].dtype, pd.CategoricalDtype)
         ]
         
         if not available_cols: 
