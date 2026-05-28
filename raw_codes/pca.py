@@ -91,11 +91,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  # registers 3d projection
-import numpy as np
-import pandas as pd
-from sklearn.decomposition import PCA
-from sklearn.neighbors import NearestNeighbors
-from sklearn.preprocessing import StandardScaler
+import cupy as np
+import cudf as pd
+from cuml.decomposition import PCA
+from cuml.neighbors import NearestNeighbors
+from cuml.preprocessing import StandardScaler
 
 from philgeps_theme_scores import (
     POLICY_PCA_BASE_COLUMNS,
@@ -539,20 +539,20 @@ def _region_backtrack_arrays(df_work: pd.DataFrame, *, path_fs: str) -> tuple[np
         )
         return None
     rp = (
-        sub[REGION_BACKTRACK_COL_PROC].fillna("").astype(str).to_numpy()
+        sub[REGION_BACKTRACK_COL_PROC].fillna("").astype(str).to_cupy()
         if REGION_BACKTRACK_COL_PROC in sub.columns
         else np.repeat("", len(sub))
     )
     ra = (
-        sub[REGION_BACKTRACK_COL_AW].fillna("").astype(str).to_numpy()
+        sub[REGION_BACKTRACK_COL_AW].fillna("").astype(str).to_cupy()
         if REGION_BACKTRACK_COL_AW in sub.columns
         else np.repeat("", len(sub))
     )
     return rp, ra
 
 
-def _pandas_series_to_json_record(row: pd.Series) -> dict[str, Any]:
-    """JSON-serializable dict for one FS row (no NaN / numpy scalars)."""
+def _cudf_series_to_json_record(row: pd.Series) -> dict[str, Any]:
+    """JSON-serializable dict for one FS row (no NaN / cupy scalars)."""
     out: dict[str, Any] = {}
     for col in row.index:
         name = str(col)
@@ -612,7 +612,7 @@ def _write_pca_interactive_row_lookup_json(
         pos = int(iloc_idx[j])
         rid = df_work.index[pos]
         key = str(rid)
-        by_key[key] = _pandas_series_to_json_record(fs.iloc[pos])
+        by_key[key] = _cudf_series_to_json_record(fs.iloc[pos])
     payload: dict[str, Any] = {
         "ok": True,
         "source_csv": os.path.basename(path_fs),
@@ -670,7 +670,7 @@ def _save_pc_space_3d_interactive_html(
         rproc = r_all[iloc_idx]
         rawardee = a_all[iloc_idx]
     cum3 = float(sum(ratios3))
-    row_id = df_work.index.take(iloc_idx).to_numpy()
+    row_id = df_work.index.take(iloc_idx).to_cupy()
 
     customdata = np.column_stack(
         [
@@ -999,9 +999,9 @@ def run_step03(
     scaler: StandardScaler | None = None
     if standardize:
         scaler = StandardScaler()
-        X = scaler.fit_transform(df_work.to_numpy(dtype=np.float64))
+        X = scaler.fit_transform(df_work.to_cupy(dtype=np.float64))
     else:
-        X = df_work.to_numpy(dtype=np.float64)
+        X = df_work.to_cupy(dtype=np.float64)
 
     pca = PCA(n_components=n_comp)
     pca.fit(X)

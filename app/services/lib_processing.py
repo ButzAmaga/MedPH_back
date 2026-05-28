@@ -1,5 +1,5 @@
-import pandas as pd
-import numpy as np
+import cudf as pd
+import cupy as np
 
 def execute_preprocessing_pipeline(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -51,7 +51,7 @@ def execute_preprocessing_pipeline(df: pd.DataFrame) -> pd.DataFrame:
 def generate_preprocessing_snapshot(df: pd.DataFrame) -> dict:
     """
     Generates high-level feature dimensions metadata for evaluation validation telemetry.
-    Converts native NumPy types back into native Python types to satisfy serialization requirements.
+    Converts native cupy types back into native Python types to satisfy serialization requirements.
     """
     if df.empty:
         return {"total_records": 0, "column_count": 0, "columns_present": [], "unique_years_computed": [], "unique_regions_collapsed": []}
@@ -67,7 +67,7 @@ def generate_preprocessing_snapshot(df: pd.DataFrame) -> dict:
             str(c) for c in df.columns 
             if pd.api.types.is_numeric_dtype(df[c]) and df[c].notna().any()
         ],
-        #  .tolist() converts NumPy arrays (e.g. numpy.int32) into native Python types
+        #  .tolist() converts cupy arrays (e.g. cupy.int32) into native Python types
         "unique_years_computed": [int(y) for y in df["Year"].unique()] if "Year" in df.columns else [],
         "unique_regions_collapsed": [str(r) for r in df["Region"].unique()] if "Region" in df.columns else []
     }

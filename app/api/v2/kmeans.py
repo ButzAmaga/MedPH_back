@@ -6,8 +6,8 @@ import os
 from pathlib import Path
 from typing import AsyncGenerator, Any
 
-import numpy as np
-import pandas as pd
+import cupy as np
+import cudf as pd
 from fastapi import APIRouter, Form, Query
 from fastapi.responses import FileResponse, StreamingResponse
 

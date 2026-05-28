@@ -46,9 +46,9 @@ from typing import Any
 import matplotlib
 
 matplotlib.use("Agg")
-import numpy as np
-import pandas as pd
-from sklearn.cluster import KMeans
+import cupy as np
+import cudf as pd
+from cuml.cluster import KMeans
 
 from philgeps_kmeans_common import (
     KMEANS_N_INIT,

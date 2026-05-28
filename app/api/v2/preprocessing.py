@@ -1,7 +1,7 @@
 import os
 import asyncio
 from typing import AsyncGenerator
-import pandas as pd
+import cudf as pd
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import FileResponse, StreamingResponse
 from services.lib_SSE import run_with_heartbeats, sse, sse_progress

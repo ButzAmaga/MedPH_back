@@ -1,12 +1,12 @@
 import os
 import io
 import base64
-import pandas as pd
-import numpy as np
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score
+import cudf as pd
+import cupy as np
+from cuml.cluster import KMeans
+from cuml.metrics import silhouette_score
 import matplotlib
-import numpy as np
+import cupy as np
 from typing import Dict, Any
 import matplotlib.pyplot as plt
 

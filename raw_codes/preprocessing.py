@@ -38,8 +38,8 @@ import matplotlib
 
 matplotlib.use("Agg")  # non-interactive backend for headless runs
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
+import cupy as np
+import cudf as pd
 import seaborn as sns
 from scipy.stats import chi2_contingency
 
@@ -597,7 +597,7 @@ def generate_merged_eda_charts(
         dtype_counts = df.dtypes.astype(str).value_counts()
         fig, ax = plt.subplots(figsize=(8, 5))
         dtype_counts.plot(kind="barh", ax=ax, color="coral")
-        ax.set_title(f"{dataset_label} — number of columns by pandas dtype")
+        ax.set_title(f"{dataset_label} — number of columns by cudf dtype")
         ax.set_xlabel("Number of columns")
         plt.tight_layout()
         fig.savefig(os.path.join(out_dir, "02_overview_dtype_counts.png"), dpi=150)
@@ -828,7 +828,7 @@ def write_cleaned_schema_table(df: pd.DataFrame, schema_dir: str) -> tuple[str, 
             "canonical_position": pos,
             "column_name": col,
             "in_canonical_46": col in canonical_set or col == "Year",
-            "pandas_dtype": str(s.dtype),
+            "cudf_dtype": str(s.dtype),
             "row_count": n,
             "null_count": null_count,
             "null_pct": round(100.0 * null_count / n, 4) if n else 0.0,

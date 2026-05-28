@@ -2,10 +2,10 @@
 import os
 import json
 from typing import List
-import numpy as np
-import pandas as pd
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
+import cupy as np
+import cudf as pd
+from cuml.decomposition import PCA
+from cuml.preprocessing import StandardScaler
 
 # Column config fallback from original script
 POLICY_PCA_BASE_COLUMNS = [

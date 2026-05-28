@@ -29,7 +29,7 @@ async def _clean_pipeline_stream(
     Yields SSE frames for every major pipeline step.
     For each blocking operation a concurrent heartbeat loop keeps the
     connection alive by draining an asyncio.Queue every HEARTBEAT_INTERVAL
-    seconds while pandas does its work.
+    seconds while cudf does its work.
     """
 
     # Shared queue: heartbeat coroutine pushes frames here;

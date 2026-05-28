@@ -3,8 +3,8 @@ from __future__ import annotations
 
 import io
 import os
-import pandas as pd
-import numpy as np
+import cudf as pd
+import cupy as np
 from typing import Any, Tuple, Dict
 
 # --- Configuration Schemas ---
@@ -43,7 +43,7 @@ PATTERN = "|".join(MEDICAL_KEYWORDS)
 
 
 def load_dataframe_from_stream(contents: bytes, filename: str, is_2022: bool) -> pd.DataFrame:
-    """Parses raw uploaded file bytes into a Pandas DataFrame."""
+    """Parses raw uploaded file bytes into a cudf DataFrame."""
     ext = os.path.splitext(filename)[1].lower()
     if ext == ".csv":
         if is_2022:

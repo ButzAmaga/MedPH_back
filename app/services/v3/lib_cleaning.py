@@ -4,8 +4,8 @@ from __future__ import annotations
 import io
 import os
 import csv
-import pandas as pd
-import numpy as np
+import cudf as pd
+import cupy as np
 from typing import Any, Dict, List, Literal, Optional, Tuple
 
 # ---------------------------------------------------------------------------
@@ -128,7 +128,7 @@ def detect_file_format(
 
     Detection logic (CSV)
     ---------------------
-    1. Read the first non-empty row with the csv module (fast, no pandas).
+    1. Read the first non-empty row with the csv module (fast, no cudf).
     2. If the first cell, lowercased, matches _HEADERED_FIRST_COL the file
        has a header → is_2022 = False (high confidence).
     3. Otherwise check the column count of that row:

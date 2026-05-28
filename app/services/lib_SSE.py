@@ -11,7 +11,7 @@ from services.custom_toJson import SafeJsonEncoder
 HEARTBEAT_INTERVAL = 10
 
 def sse(event: str, data: dict) -> str:
-    """Formats a single Server-Sent Events frame, safely serialising all pandas/numpy types."""
+    """Formats a single Server-Sent Events frame, safely serialising all cudf/cupy types."""
     return f"event: {event}\ndata: {json.dumps(data, cls=SafeJsonEncoder)}\n\n"
  
 

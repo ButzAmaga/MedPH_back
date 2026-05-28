@@ -6,8 +6,8 @@ from datetime import date, datetime
 import os
 from typing import AsyncGenerator, Any, List
 
-import numpy as np
-import pandas as pd
+import cupy as np
+import cudf as pd
 from fastapi import APIRouter, Form, HTTPException, Query, status
 from fastapi.responses import FileResponse, StreamingResponse
 from services.lib_SSE import run_with_heartbeats, sse, sse_progress

@@ -1,20 +1,20 @@
 from datetime import date, datetime
 import json
 import math
-import numpy as np
-import pandas as pd
+import cupy as np
+import cudf as pd
 
 
 class SafeJsonEncoder(json.JSONEncoder):
     """
     Extends the default JSON encoder to handle types that commonly appear
-    in pandas snapshot dicts but are not JSON-serialisable by default:
+    in cudf snapshot dicts but are not JSON-serialisable by default:
  
     - datetime / date          → ISO-8601 string
-    - numpy integers           → int
-    - numpy floats             → float  (NaN / Inf → None)
-    - numpy booleans           → bool
-    - numpy arrays / pd.Series → list
+    - cupy integers           → int
+    - cupy floats             → float  (NaN / Inf → None)
+    - cupy booleans           → bool
+    - cupy arrays / pd.Series → list
     - pd.NA / pd.NaT           → None
     - any remaining unknown    → str(obj) as a safe fallback
     """
@@ -26,7 +26,7 @@ class SafeJsonEncoder(json.JSONEncoder):
         if obj is pd.NaT:
             return None
  
-        # ── numpy scalars ──────────────────────────────────────────────────
+        # ── cupy scalars ──────────────────────────────────────────────────
         if isinstance(obj, np.integer):
             return int(obj)
         if isinstance(obj, np.floating):
@@ -39,7 +39,7 @@ class SafeJsonEncoder(json.JSONEncoder):
         if isinstance(obj, (np.ndarray, pd.Series, pd.Index)):
             return obj.tolist()
  
-        # ── pandas NA ──────────────────────────────────────────────────────
+        # ── cudf NA ──────────────────────────────────────────────────────
         try:
             if pd.isna(obj):
                 return None

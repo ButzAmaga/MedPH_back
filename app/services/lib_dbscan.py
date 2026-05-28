@@ -1,11 +1,11 @@
 import os
 import io
 import base64
-import pandas as pd
-import numpy as np
-from sklearn.cluster import DBSCAN
-from sklearn.metrics import silhouette_score
-from sklearn.preprocessing import StandardScaler
+import cudf as pd
+import cupy as np
+from cuml.cluster import DBSCAN
+from cuml.metrics import silhouette_score
+from cuml.preprocessing import StandardScaler
 from typing import Dict, Any
 import matplotlib
 import matplotlib.pyplot as plt

@@ -1,7 +1,7 @@
 import os
 import pathlib
 from fastapi import APIRouter, HTTPException, status
-import pandas as pd
+import cudf as pd
 from pydantic import BaseModel
 from services import lib_processing as preprocessor
 from typing import List
@@ -40,7 +40,7 @@ async def process_file():
 
     # 2. Extract Data Matrix
     try:
-        # Use simple standard pandas reading configuration since data was cleaned by Step 1
+        # Use simple standard cudf reading configuration since data was cleaned by Step 1
         df_cleaned = pd.read_csv(input_path, low_memory=False, encoding="utf-8")
     except Exception as read_err:
         raise HTTPException(
